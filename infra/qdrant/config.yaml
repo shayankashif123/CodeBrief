@@ -1,0 +1,21 @@
+# Qdrant configuration for Codebrief
+
+storage:
+  # Data persistence directory (mapped to Docker volume)
+  storage_path: /qdrant/storage
+
+  # Enable Write-Ahead Log for crash recovery
+  wal:
+    wal_capacity_mb: 32
+
+service:
+  # Bind to all interfaces inside the container
+  host: 0.0.0.0
+  http_port: 6333
+  grpc_port: 6334
+
+  # API key auth — value comes from QDRANT__SERVICE__API_KEY env var
+  # (Qdrant reads this automatically from the environment)
+  enable_cors: true
+
+log_level: INFO

@@ -1,0 +1,110 @@
+# ─────────────────────────────────────────────────────────────
+# Codebrief — Monorepo .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# ─── Environment — NEVER commit these ─────────────────────────
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.test
+*.pem
+*.key
+
+# ─── Node / NestJS / Next.js ──────────────────────────────────
+node_modules/
+dist/
+build/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.yarn/cache
+.yarn/unplugged
+.pnp.*
+
+# ─── Python / FastAPI ─────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+ENV/
+.Python
+*.egg-info/
+*.egg
+dist/
+.eggs/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# ─── Docker ───────────────────────────────────────────────────
+# Don't ignore docker-compose files — those are committed
+*.log
+docker-compose.override.yml
+
+# ─── Temporary repo clones (FastAPI indexing scratch space) ───
+/tmp/codebrief-repos/
+ai-service/tmp/
+
+# ─── AWS ──────────────────────────────────────────────────────
+.aws/
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+cdk.out/
+cdk.context.json
+
+# ─── Testing & Coverage ───────────────────────────────────────
+coverage/
+*.lcov
+.nyc_output/
+test-results/
+playwright-report/
+
+# ─── IDE & Editor ─────────────────────────────────────────────
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+.history/
+
+# ─── OS ───────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ─── Misc ─────────────────────────────────────────────────────
+*.local
+.cache/
+.parcel-cache/
+*.tgz
+*.tar.gz
