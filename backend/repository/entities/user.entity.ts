@@ -16,8 +16,8 @@ export class User {
   @Column({ name: 'github_id', type: 'varchar', length: 50, unique: true })
   githubId: string;
 
-  @Column({ type: 'varchar', length: 255, unique: true })
-  email: string;
+  @Column({ type: 'varchar', length: 255, unique: true, nullable: true })
+  email: string | null;
 
   @Column({ type: 'varchar', length: 100 })
   username: string;

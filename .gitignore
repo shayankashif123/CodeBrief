@@ -108,3 +108,5 @@ Desktop.ini
 .parcel-cache/
 *.tgz
 *.tar.gz
+.claude/settings.local.json
+.claude
