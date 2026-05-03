@@ -63,7 +63,9 @@ async function bootstrap() {
   app.enableVersioning({ type: VersioningType.URI });
 
   // ─── Global prefix ──────────────────────────────────────────
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', {
+    exclude: ['health', 'ready'],  // these stay at root level
+  });
 
   // ─── Swagger (dev only) ─────────────────────────────────────
   if (nodeEnv !== 'production') {

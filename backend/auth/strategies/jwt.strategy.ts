@@ -14,6 +14,7 @@ export interface JwtPayload {
     email: string;
     iat?: number;      // issued at — added automatically by jsonwebtoken
     exp?: number;      // expires at — added automatically by jsonwebtoken
+    sessionId: string;
 }
 
 @Injectable()
@@ -45,6 +46,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         }
 
         // Whatever we return here is attached to req.user on every request
-        return user;
+        return { ...user, sessionId: payload.sessionId }
     }
 }

@@ -109,14 +109,14 @@ export class AuthController {
     // Revokes only the current device's refresh token.
     // Access token is stateless — it expires naturally after 15 minutes.
     @Post('logout')
-    @UseGuards(JwtRefreshGuard)
+    @UseGuards(JwtAuthGuard)
     @HttpCode(HttpStatus.OK)
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Logout current session' })
     @ApiResponse({ status: 200, description: 'Logged out successfully' })
     async logout(@Req() req: Request): Promise<{ message: string }> {
-        const { userId, sessionId } = req.user as { userId: string; sessionId: string };
-        await this.authService.logout(userId, sessionId);
+        const user = req.user as User & { sessionId: string };
+        await this.authService.logout(user.id, user.sessionId);
         return { message: 'Logged out successfully' };
     }
 

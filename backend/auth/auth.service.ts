@@ -88,6 +88,7 @@ export class AuthService {
             sub: user.id,
             username: user.username,
             email: user.email ?? "",
+            sessionId,
         };
 
         // Refresh token payload — includes sessionId for targeted revocation

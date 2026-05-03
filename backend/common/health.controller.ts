@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, VERSION_NEUTRAL } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { InjectConnection } from '@nestjs/mongoose';
@@ -6,19 +6,27 @@ import { Connection } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
-@Controller('health')
+@Controller({
+  path: '/',
+  version: VERSION_NEUTRAL,
+})
 export class HealthController {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectConnection() private readonly mongoConnection: Connection,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
+
+  @Get('health')
+  getHealth() {
+    return { status: 'ok', timestamp: new Date().toISOString() };
+  }
 
   @Get('ready')
   async getReadiness() {
     const postgresHealthy = this.dataSource.isInitialized;
     const mongoHealthy = this.mongoConnection.readyState === 1; // 1 = Connected
-    
+
     // Check if AI-service is reachable[cite: 14]
     let aiServiceHealthy = false;
     try {
