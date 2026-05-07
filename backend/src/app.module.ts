@@ -1,15 +1,15 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { MongooseModule } from '@nestjs/mongoose';
 import { validate } from '@/config/env.validation';
 import { getTypeOrmConfig } from '@/config/database.config';
-import { getMongoConfig } from '@/config/mongodb.config';
 import { getBullConfig } from '@/config/redis.config';
+import { RawBodyMiddleware } from '@/common/middleware/raw-body.middleware';
+import { HealthController } from '@/common/health.controller';
 
-// ─── Feature modules (stubbed — implemented in later tasks) ──
+// ─── Feature modules ──────────────────────────────────────────────────────
 import { AuthModule } from '@/auth/auth.module';
 import { GithubModule } from '@/github/github.module';
 import { RepositoryModule } from '@/repository/repository.module';
@@ -18,51 +18,52 @@ import { DocumentationModule } from '@/documentation/documentation.module';
 import { OnboardingModule } from '@/onboarding/onboarding.module';
 import { AnalyticsModule } from '@/analytics/analytics.module';
 import { WebsocketModule } from '@/websocket/websocket.module';
-import { HealthController } from '../common/health.controller';
+import { MongooseModule } from '@nestjs/mongoose';
+import { getMongoConfig } from '@/config/mongodb.config';
 
 @Module({
   imports: [
-    // ─── Config — must be first, all other modules depend on it ──
+    // ─── Config — must be first ────────────────────────────────────────
     ConfigModule.forRoot({
-      isGlobal: true,          // available in every module without re-importing
+      isGlobal: true,
       envFilePath: ['.env', '../.env'],
-      validate,                // throws at startup if any required var is missing
-      cache: true,             // caches parsed config — avoids re-reading on every access
+      validate,
+      cache: true,
     }),
 
-    // ─── Database ─────────────────────────────────────────────
+    // ─── Database ──────────────────────────────────────────────────────
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: getTypeOrmConfig,
     }),
 
-    // ─── Queue (BullMQ) ───────────────────────────────────────
-    BullModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: getBullConfig,
-    }),
-
-    // ─── NoSQL Database (MongoDB) ─────────────────────────────
+    // ─── MongoDB ───────────────────────────────────────────────────────
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: getMongoConfig,
     }),
 
-    // ─── Rate limiting ────────────────────────────────────────
+    // ─── Queue (BullMQ) ────────────────────────────────────────────────
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: getBullConfig,
+    }),
+
+    // ─── Rate limiting ─────────────────────────────────────────────────
     ThrottlerModule.forRoot([
       {
         name: 'short',
-        ttl: 1000,    // 1 second
-        limit: 10,    // max 10 requests per second per IP
+        ttl: 1000,
+        limit: 10,
       },
       {
         name: 'medium',
-        ttl: 60000,   // 1 minute
-        limit: 200,   // max 200 requests per minute per IP
+        ttl: 60000,
+        limit: 200,
       },
     ]),
 
-    // ─── Feature modules ──────────────────────────────────────
+    // ─── Feature modules ───────────────────────────────────────────────
     AuthModule,
     GithubModule,
     RepositoryModule,
@@ -74,4 +75,23 @@ import { HealthController } from '../common/health.controller';
   ],
   controllers: [HealthController],
 })
-export class AppModule { }
+export class AppModule implements NestModule {
+  /**
+   * Apply RawBodyMiddleware ONLY to the webhook route.
+   *
+   * This middleware captures the raw request bytes before NestJS
+   * parses the body — required for HMAC-SHA256 signature validation.
+   *
+   * Scoped surgically to POST /github/webhook only.
+   * Applying it globally would interfere with all other JSON parsing
+   * across auth, repository, and every other route.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(RawBodyMiddleware)
+      .forRoutes({
+        path: 'github/webhook',
+        method: RequestMethod.POST,
+      });
+  }
+}

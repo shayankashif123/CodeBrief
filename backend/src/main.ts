@@ -11,6 +11,7 @@ import { LoggingInterceptor } from '../common/interceptors/logging.interceptor';
 async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
     // Structured JSON logs in production, pretty logs in dev
     logger:
       process.env.NODE_ENV === 'production'
@@ -63,9 +64,7 @@ async function bootstrap() {
   app.enableVersioning({ type: VersioningType.URI });
 
   // ─── Global prefix ──────────────────────────────────────────
-  app.setGlobalPrefix('api', {
-    exclude: ['health', 'ready'],  // these stay at root level
-  });
+  app.setGlobalPrefix('api');
 
   // ─── Swagger (dev only) ─────────────────────────────────────
   if (nodeEnv !== 'production') {

@@ -1,3 +1,9 @@
+include .env
+export
+
+SHELL := /bin/bash
+export PATH := /usr/local/bin:/usr/bin:/bin:$(PATH)
+
 .PHONY: help up down restart logs ps clean setup health
 
 # ─── Help ─────────────────────────────────────────────────────
@@ -56,11 +62,11 @@ health:
 	@echo ""
 	@echo "  Checking service health..."
 	@echo ""
-	@echo -n "  NestJS   "; curl -sf http://localhost:3000/health  && echo "✓ healthy" || echo "✗ not ready"
+	@echo -n "  NestJS   "; curl -sf http://localhost:3000/api/health && echo "✓ healthy" || echo "✗ not ready"
 	@echo -n "  FastAPI  "; curl -sf http://localhost:8000/health  && echo "✓ healthy" || echo "✗ not ready"
 	@echo -n "  Qdrant   "; curl -sf http://localhost:6333/healthz && echo "✓ healthy" || echo "✗ not ready"
-	@echo -n "  Postgres "; docker exec codebrief_postgres pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} 2>&1 | grep -q "accepting" && echo "✓ healthy" || echo "✗ not ready"
-	@echo -n "  Redis    "; docker exec codebrief_redis redis-cli -a $${REDIS_PASSWORD} ping 2>/dev/null | grep -q PONG && echo "✓ healthy" || echo "✗ not ready"
+	@echo -n "  Postgres "; docker exec codebrief_postgres pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -q 2>&1 && echo "✓ healthy" || echo "✗ not ready"
+	@echo -n "  Redis    "; docker exec codebrief_redis redis-cli -a $$REDIS_PASSWORD ping 2>/dev/null | grep -q PONG && echo "✓ healthy" || echo "✗ not ready"
 	@echo -n "  MongoDB  "; docker exec codebrief_mongo mongosh --eval "db.adminCommand('ping')" --quiet 2>/dev/null | grep -q "ok: 1" && echo "✓ healthy" || echo "✗ not ready"
 	@echo ""
 
