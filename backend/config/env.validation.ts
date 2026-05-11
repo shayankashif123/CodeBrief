@@ -92,7 +92,7 @@ class EnvironmentVariables {
   // ─── Optional ────────────────────────────────────────────────
   @IsString()
   @IsOptional()
-  INTERNAL_API_KEY?: string;
+  INTERNAL_SECRET?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

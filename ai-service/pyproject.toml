@@ -1,0 +1,16 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+filterwarnings = [
+  "error",
+  "ignore::DeprecationWarning:tenacity",
+  "ignore::DeprecationWarning:asyncio",
+  "ignore::DeprecationWarning:pyparsing",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true

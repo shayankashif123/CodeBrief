@@ -1,115 +1,153 @@
 """
-Codebrief AI Service — FastAPI application entry point
+FastAPI application entry point — Codebrief AI Service.
 
-Sprint 1: Stub implementation — health check only.
-Sprint 2: Full AI pipeline (indexing, review, documentation, RAG chat).
+Architecture:
+- create_app() factory function (not a module-level app instance) — testable,
+  importable without side effects, matches the pattern of NestJS's bootstrap()
+- Lifespan context manager handles all startup/shutdown in one place:
+    startup: configure logging → connect clients → store on app.state
+    shutdown: close connections cleanly (important for ECS task draining)
+- Middleware applied in registration order (bottom of stack executes first):
+    1. RequestIdMiddleware  — always first, establishes request_id for all logs
+    2. InternalAuthMiddleware — second, rejects unauthorized before any work
+- Exception handlers cover our typed hierarchy + bare Exception fallback
+- Swagger UI available at /api/docs in non-production environments only
+
+Startup sequence (order matters):
+1. configure_logging() — must be first, everything else logs
+2. configure_gemini() — global SDK configuration, must run before any embed/generate call
+3. create_qdrant_client() — bootstraps collection + indexes, stored on app.state
+4. create_mongo_client() — bootstraps indexes, stored on app.state
 """
 
-from fastapi import FastAPI, HTTPException, Header
-from pydantic import BaseModel
-import os
+from contextlib import asynccontextmanager
 
-app = FastAPI(
-    title="Codebrief AI Service",
-    description="RAG pipeline, code review, and documentation generation",
-    version="0.1.0",
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.clients.gemini import configure_gemini
+from app.clients.mongo import create_mongo_client
+from app.clients.qdrant import create_qdrant_client
+from app.core.config import get_settings
+from app.core.exceptions import (
+    CodebriefAIError,
+    codebrief_exception_handler,
+    unhandled_exception_handler,
 )
+from app.core.logging import configure_logging, get_logger
+from app.core.middleware import InternalAuthMiddleware, RequestIdMiddleware
+from app.routers import health, embeddings
 
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
-
-
-def verify_internal_key(x_internal_key: str = Header(...)):
-    """All endpoints require the internal API key set in NestJS → FastAPI calls."""
-    if x_internal_key != INTERNAL_API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid internal API key")
+logger = get_logger(__name__)
 
 
-# ─── Health ───────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan — startup and shutdown in one coherent block.
 
-@app.get("/health", tags=["health"])
-async def health():
-    """Health check — used by Docker and ECS."""
-    return {"status": "ok", "service": "codebrief-ai"}
+    Using the lifespan context manager (not deprecated @app.on_event) as
+    recommended since FastAPI 0.93. Everything before `yield` is startup;
+    everything after is shutdown.
 
+    Clients are stored on app.state so they're accessible via request.app.state
+    in route handlers and middleware — no module-level singletons.
+    """
+    settings = get_settings()
 
-@app.get("/ready", tags=["health"])
-async def ready():
-    """Readiness check — verifies downstream connections."""
-    checks = {}
+    # ── Startup ───────────────────────────────────────────────────────────────
+    configure_logging()
+    logger.info(
+        "ai_service_starting",
+        env=settings.ENV,
+        log_level=settings.LOG_LEVEL,
+    )
 
-    # Qdrant check
-    try:
-        from qdrant_client import QdrantClient
-        client = QdrantClient(
-            host=os.getenv("QDRANT_HOST", "qdrant"),
-            port=int(os.getenv("QDRANT_PORT", "6333")),
-            api_key=os.getenv("QDRANT_API_KEY"),
-        )
-        client.get_collections()
-        checks["qdrant"] = "ok"
-    except Exception as e:
-        checks["qdrant"] = f"error: {str(e)}"
+    # Configure Google SDK — must happen before any embed/generate call
+    configure_gemini()
 
-    all_ok = all(v == "ok" for v in checks.values())
-    return {"status": "ready" if all_ok else "degraded", "checks": checks}
+    # Connect to Qdrant — bootstraps collection and payload indexes
+    app.state.qdrant = await create_qdrant_client()
 
+    # Connect to MongoDB — bootstraps indexes, returns (client, db) tuple
+    mongo_client, db = await create_mongo_client()
+    app.state.mongo_client = mongo_client  # kept for shutdown
+    app.state.db = db
 
-# ─── Stub endpoints (wired up in Sprint 2) ────────────────────
+    logger.info("ai_service_ready", port=settings.PORT)
 
-class IndexRepoRequest(BaseModel):
-    repository_id: str
-    repo_full_name: str
-    clone_url: str
-    installation_token: str
-    default_branch: str = "main"
+    yield  # Application is now running
 
+    # ── Shutdown ──────────────────────────────────────────────────────────────
+    logger.info("ai_service_shutting_down")
 
-@app.post("/index", tags=["indexing"])
-async def index_repository(body: IndexRepoRequest, x_internal_key: str = Header(...)):
-    verify_internal_key(x_internal_key)
-    # Sprint 2: implement IndexingService here
-    return {"status": "stub", "message": "Indexing service not yet implemented"}
+    # Close Qdrant connection
+    await app.state.qdrant.close()
 
+    # Close MongoDB connection — drains in-flight operations
+    app.state.mongo_client.close()
 
-class ReviewRequest(BaseModel):
-    repository_id: str
-    pr_number: int
-    head_sha: str
-    diff: str
-    pr_title: str
-    pr_description: str | None = None
-    author_login: str
+    logger.info("ai_service_shutdown_complete")
 
 
-@app.post("/review", tags=["review"])
-async def review_pull_request(body: ReviewRequest, x_internal_key: str = Header(...)):
-    verify_internal_key(x_internal_key)
-    # Sprint 2: implement ReviewService here
-    return {"status": "stub", "message": "Review service not yet implemented"}
+def create_app() -> FastAPI:
+    """
+    Application factory — creates and configures the FastAPI instance.
+
+    Using a factory function (not module-level app = FastAPI()) means:
+    - Tests can call create_app() and get a fresh instance each time
+    - The module can be imported without starting the app
+    - Settings are read at factory call time, not import time
+    """
+    settings = get_settings()
+
+    app = FastAPI(
+        title="Codebrief AI Service",
+        description="AI pipeline for PR review and documentation generation",
+        version="1.0.0",
+        # Only expose Swagger UI in non-production environments
+        docs_url="/api/docs" if settings.ENV != "production" else None,
+        redoc_url="/api/redoc" if settings.ENV != "production" else None,
+        openapi_url="/api/openapi.json" if settings.ENV != "production" else None,
+        lifespan=lifespan,
+    )
+
+    # ── Middleware (applied bottom-up — last registered executes first) ────────
+    # InternalAuthMiddleware executes second (validates secret)
+    app.add_middleware(
+        InternalAuthMiddleware,
+        secret=settings.INTERNAL_SECRET,
+    )
+    # RequestIdMiddleware executes first (establishes request_id for all subsequent logs)
+    app.add_middleware(RequestIdMiddleware)
+
+    # CORS — only relevant if this service is ever called from a browser directly
+    # In production it never is (only NestJS calls it), but needed for local Swagger UI
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000"] if settings.ENV != "production" else [],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # ── Exception handlers ────────────────────────────────────────────────────
+    # Typed hierarchy handler — covers all CodebriefAIError subclasses
+    app.add_exception_handler(CodebriefAIError, codebrief_exception_handler)
+    # Fallback — catches anything not in our typed hierarchy
+    app.add_exception_handler(Exception, unhandled_exception_handler)
+
+    # ── Routers ───────────────────────────────────────────────────────────────
+    app.include_router(health.router)          # /health, /ready — no prefix
+    app.include_router(embeddings.router)      # /embeddings/embed
+
+    # Task 6 routers — added in the next task
+    # app.include_router(indexing.router)      # /indexing/start, /indexing/status
+    # app.include_router(review.router)        # /review
+
+    return app
 
 
-class DocUpdateRequest(BaseModel):
-    repository_id: str
-    pr_number: int
-    merge_sha: str
-    diff: str
-
-
-@app.post("/documentation/update", tags=["documentation"])
-async def update_documentation(body: DocUpdateRequest, x_internal_key: str = Header(...)):
-    verify_internal_key(x_internal_key)
-    # Sprint 2: implement DocumentationService here
-    return {"status": "stub", "message": "Documentation service not yet implemented"}
-
-
-class ChatRequest(BaseModel):
-    repository_id: str
-    question: str
-    conversation_history: list = []
-
-
-@app.post("/chat", tags=["onboarding"])
-async def onboarding_chat(body: ChatRequest, x_internal_key: str = Header(...)):
-    verify_internal_key(x_internal_key)
-    # Sprint 2: implement RAG chat here
-    return {"status": "stub", "message": "Chat service not yet implemented"}
+# ── ASGI application instance ─────────────────────────────────────────────────
+# Uvicorn targets this: uvicorn main:app
+# Tests import create_app() directly and never touch this module-level instance
+app = create_app()

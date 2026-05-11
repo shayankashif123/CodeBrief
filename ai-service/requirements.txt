@@ -1,24 +1,29 @@
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
-pydantic==2.7.0
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1      # standard = websockets + httptools for speed
 
-# Google AI (Gemini + Embeddings)
-google-generativeai==0.7.0
+# ── Validation & settings ─────────────────────────────────────────────────────
+pydantic==2.10.3
+pydantic-settings==2.6.1      # BaseSettings with .env support
 
-# Qdrant vector database client
-qdrant-client==1.9.0
+# ── Database clients ──────────────────────────────────────────────────────────
+motor==3.6.0                   # async MongoDB driver (wraps PyMongo)
+pymongo==4.9.2                 # motor peer dependency
+qdrant-client==1.12.1          # official Qdrant client
 
-# MongoDB
-motor==3.4.0          # async MongoDB driver
-pymongo==4.7.0
+# ── Google AI ─────────────────────────────────────────────────────────────────
+google-generativeai==0.8.3     # Gemini + text-embedding-004
 
-# Code analysis (Sprint 2 — AST-based chunking)
-tree-sitter==0.22.0
+# ── HTTP client ───────────────────────────────────────────────────────────────
+httpx==0.28.1                  # async HTTP — used for internal NestJS calls
 
-# HTTP client (for GitHub API calls if needed in FastAPI)
-httpx==0.27.0
+# ── Async utilities ───────────────────────────────────────────────────────────
+tenacity==9.0.0                # retry logic with exponential backoff
 
-# Utilities
-python-dotenv==1.0.0
-tenacity==8.2.3       # retry logic for API calls
-structlog==24.1.0     # structured logging
+# ── Observability ─────────────────────────────────────────────────────────────
+structlog==24.4.0              # structured JSON logging
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-mock==3.14.0
